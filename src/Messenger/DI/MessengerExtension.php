@@ -262,11 +262,15 @@ class MessengerExtension extends CompilerExtension
                 $dsn           = $transportConfig;
                 $retryStrategy = new RetryStrategyConfig();
                 $options       = [];
+                $serializer    = $defaultSerializer;
             } else {
                 $dsn           = $transportConfig->dsn;
                 $retryStrategy = $transportConfig->retryStrategy ?? new RetryStrategyConfig();
-                $options       = $transportConfig->options;
-            }
+                $options       = $transportConfig->options;                $serializer    = $transportConfig->serializer !== null
+                    ? $builder->addDefinition($this->prefix('serializer.' . $transportName))
+                        ->setType(SerializerInterface::class)
+                        ->setFactory($transportConfig->serializer)
+                    : $defaultSerializer;            }
 
             $retryStrategyService = $builder->addDefinition($this->prefix('transport.' . $transportName . '.retryStrategy'))
                 ->setTags([self::TAG_RETRY_STRATEGY => $transportName]);
@@ -288,7 +292,7 @@ class MessengerExtension extends CompilerExtension
             $transportServiceName = $this->prefix('transport.' . $transportName);
 
             $builder->addDefinition($transportServiceName)
-                ->setFactory([$transportFactory, 'createTransport'], [$dsn, $options, $defaultSerializer])
+                ->setFactory([$transportFactory, 'createTransport'], [$dsn, $options, $serializer])
                 ->setTags([
                     SendersLocator::TAG_SENDER_ALIAS => $transportName,
                     self::TAG_RECEIVER_ALIAS => $transportName,
