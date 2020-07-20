@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+// phpcs:disable SlevomatCodingStandard.TypeHints.TypeHintDeclaration
+
 namespace Fmasa\Messenger\DI;
 
 use Nette\DI\Definitions\Statement;
@@ -17,7 +19,10 @@ final class TransportConfig
     /** @var RetryStrategyConfig|null */
     public $retryStrategy;
 
-    /** @var mixed[] */
+    /**
+     * @var array
+     * @phpstan-var mixed[]
+     */
     public $options = [];
 
     /**
