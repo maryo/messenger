@@ -34,7 +34,9 @@ use Symfony\Component\Messenger\Middleware\HandleMessageMiddleware;
 use Symfony\Component\Messenger\Middleware\SendMessageMiddleware;
 use Symfony\Component\Messenger\Retry\MultiplierRetryStrategy;
 use Symfony\Component\Messenger\RoutableMessageBus;
+use Symfony\Component\Messenger\Transport\AmqpExt\AmqpTransportFactory as DeprecatedAmqpTransportFactory;
 use Symfony\Component\Messenger\Transport\InMemoryTransportFactory;
+use Symfony\Component\Messenger\Transport\RedisExt\RedisTransportFactory as DeprecatedRedisTransportFactory;
 use Symfony\Component\Messenger\Transport\Serialization\SerializerInterface;
 use Symfony\Component\Messenger\Transport\TransportFactory;
 use function array_filter;
@@ -58,12 +60,6 @@ class MessengerExtension extends CompilerExtension
     private const PANEL_MIDDLEWARE_SERVICE_NAME = '.middleware.panel';
     private const PANEL_SERVICE_NAME            = 'panel';
 
-    private const DEFAULT_FACTORIES = [
-        'amqp' => AmqpTransportFactory::class,
-        'inMemory' => InMemoryTransportFactory::class,
-        'redis' => RedisTransportFactory::class,
-    ];
-
     public function getConfigSchema() : Schema
     {
         return Expect::structure([
@@ -71,7 +67,9 @@ class MessengerExtension extends CompilerExtension
             'buses' => Expect::arrayOf(Expect::from(new BusConfig())),
             'transports' => Expect::arrayOf(Expect::anyOf(
                 Expect::string(),
-                Expect::from(new TransportConfig())
+                Expect::from(new TransportConfig(), [
+                    'retryStrategy' => Expect::from(new RetryStrategyConfig()),
+                ])
             )),
             'routing' => Expect::arrayOf(
                 Expect::anyOf(Expect::string(), Expect::listOf(Expect::string()))
@@ -242,7 +240,7 @@ class MessengerExtension extends CompilerExtension
         $transportFactory = $builder->addDefinition($this->prefix('transportFactory'))
             ->setFactory(TransportFactory::class);
 
-        foreach (self::DEFAULT_FACTORIES as $name => $factoryClass) {
+        foreach ($this->getDefaultFactories() as $name => $factoryClass) {
             $builder->addDefinition($this->prefix('transportFactory.' . $name))
                 ->setFactory($factoryClass)
                 ->setTags([self::TAG_TRANSPORT_FACTORY => true]);
@@ -266,11 +264,13 @@ class MessengerExtension extends CompilerExtension
             } else {
                 $dsn           = $transportConfig->dsn;
                 $retryStrategy = $transportConfig->retryStrategy ?? new RetryStrategyConfig();
-                $options       = $transportConfig->options;                $serializer    = $transportConfig->serializer !== null
+                $options       = $transportConfig->options;
+                $serializer    = $transportConfig->serializer !== null
                     ? $builder->addDefinition($this->prefix('serializer.' . $transportName))
                         ->setType(SerializerInterface::class)
                         ->setFactory($transportConfig->serializer)
-                    : $defaultSerializer;            }
+                    : $defaultSerializer;
+            }
 
             $retryStrategyService = $builder->addDefinition($this->prefix('transport.' . $transportName . '.retryStrategy'))
                 ->setTags([self::TAG_RETRY_STRATEGY => $transportName]);
@@ -408,5 +408,18 @@ class MessengerExtension extends CompilerExtension
         $transportFactory->setArguments([
             array_map([$builder, 'getDefinition'], array_keys($builder->findByTag(self::TAG_TRANSPORT_FACTORY))),
         ]);
+    }
+
+    private function getDefaultFactories() : array
+    {
+        return [
+            'amqp' => class_exists(AmqpTransportFactory::class) // requires PHP 7.2.5
+                ? AmqpTransportFactory::class
+                : DeprecatedAmqpTransportFactory::class,
+            'inMemory' => InMemoryTransportFactory::class,
+            'redis' => class_exists(RedisTransportFactory::class) // requires PHP 7.2.5
+                ? RedisTransportFactory::class
+                : DeprecatedRedisTransportFactory::class,
+        ];
     }
 }
