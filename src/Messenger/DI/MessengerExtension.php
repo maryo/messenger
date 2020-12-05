@@ -55,6 +55,7 @@ class MessengerExtension extends CompilerExtension
     private const TAG_RECEIVER_ALIAS    = 'messenger.receiver.alias';
     private const TAG_BUS_NAME          = 'messenger.bus.name';
     private const TAG_RETRY_STRATEGY    = 'messenger.retryStrategy';
+    private const TAG_EVENT_SUBSCRIBER  = 'messenger.eventSubscriber';
 
     private const HANDLERS_LOCATOR_SERVICE_NAME = '.handlersLocator';
     private const PANEL_MIDDLEWARE_SERVICE_NAME = '.middleware.panel';
@@ -141,6 +142,7 @@ class MessengerExtension extends CompilerExtension
         }
 
         $this->passRegisteredTransportFactoriesToMainFactory();
+        $this->passEventSubscribersToEventDispatcher();
     }
 
     public function afterCompile(ClassType $class) : void
@@ -408,6 +410,17 @@ class MessengerExtension extends CompilerExtension
         $transportFactory->setArguments([
             array_map([$builder, 'getDefinition'], array_keys($builder->findByTag(self::TAG_TRANSPORT_FACTORY))),
         ]);
+    }
+
+    private function passEventSubscribersToEventDispatcher() : void
+    {
+        $builder = $this->getContainerBuilder();
+        $eventDispatcher = $builder->getDefinition($this->prefix('console.eventDispatcher'));
+        assert($eventDispatcher instanceof ServiceDefinition);
+
+        foreach ($builder->findByTag(self::TAG_EVENT_SUBSCRIBER) as $serviceId => $tag) {
+            $eventDispatcher->addSetup('addSubscriber', [$builder->getDefinition($serviceId)]);
+        }
     }
 
     private function getDefaultFactories() : array
